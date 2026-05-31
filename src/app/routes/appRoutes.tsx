@@ -2,7 +2,6 @@ import { createBrowserRouter } from 'react-router-dom'
 import { RootLayout } from '../components/RootLayout'
 import { ManagerLayout } from '../components/ManagerLayout'
 import { HomePage } from '../../pages/auth/HomePage'
-import { AuthSelectionPage } from '../../pages/auth/AuthSelectionPage'
 import { CustomerLoginPage } from '../../pages/auth/login/CustomerLoginPage'
 import { DriverLoginPage } from '../../pages/auth/login/DriverLoginPage'
 import { CustomerRegistrationPage } from '../../pages/auth/register/customer/CustomerRegistrationPage'
@@ -19,10 +18,6 @@ export const appRoutes = createBrowserRouter([
       {
         index: true,
         element: <HomePage />
-      },
-      {
-        path: 'auth',
-        element: <AuthSelectionPage />
       },
       {
         path: 'login',

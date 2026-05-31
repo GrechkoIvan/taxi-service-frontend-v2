@@ -9,7 +9,7 @@ import {
 import { getCurrentCustomerOrder } from '../../shared/api/services/customerOrderService'
 import type { Order } from '../../shared/api/types/orderTypes'
 import {
-  type ActivePoint,
+  type ActivePointMode,
   type Coords,
   type RouteInfo,
   useOrderCreationStore,
@@ -100,7 +100,7 @@ export function CustomerOrderMap() {
   const pointBPlacemarkRef = useRef<unknown | null>(null)
   const customerPlacemarkRef = useRef<unknown | null>(null)
   const geoWatchIdRef = useRef<number | null>(null)
-  const activePointRef = useRef<ActivePoint>('A')
+  const activePointRef = useRef<ActivePointMode>(null)
   const multiRouteRef = useRef<unknown | null>(null)
 
   useEffect(() => {
@@ -139,6 +139,7 @@ export function CustomerOrderMap() {
           setSuccessMessage(null)
 
           const point = activePointRef.current
+          if (!point) return
           if (point === 'A') {
             setPointACoords(coords)
           } else {
@@ -253,7 +254,7 @@ export function CustomerOrderMap() {
       pointAPlacemarkRef.current = new ymaps.Placemark(
         pointACoords,
         { iconCaption: 'A' },
-        { preset: 'islands#blueStretchyIcon' }
+        { preset: 'islands#darkgreenStretchyIcon' }
       )
       map.geoObjects.add(pointAPlacemarkRef.current)
     } else {

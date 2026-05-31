@@ -53,6 +53,8 @@ export async function getCustomerDriverPublic(driverId: string): Promise<{
   name: string
   phone: string
   comfortLevel: 'economy' | 'comfort' | 'business' | null
+  averageRating: number
+  totalReviews: number
   car: {
     make: string
     model: string
@@ -65,5 +67,16 @@ export async function getCustomerDriverPublic(driverId: string): Promise<{
     return res.data
   } catch (error) {
     throw new Error(toErrorMessage(error, 'Ошибка получения данных водителя'))
+  }
+}
+
+export async function getCustomerDriverReviewsSummary(
+  driverId: string
+): Promise<{ averageRating: number; totalReviews: number }> {
+  try {
+    const res = await apiClient.get(`/customers/drivers/${driverId}/reviews-summary`)
+    return res.data
+  } catch (error) {
+    throw new Error(toErrorMessage(error, 'Ошибка получения рейтинга водителя'))
   }
 }

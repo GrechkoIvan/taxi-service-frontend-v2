@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useMemo, useState } from 'react'
+import { FormProvider, useForm } from 'react-hook-form'
+import { useNavigate } from 'react-router-dom'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { AlertCircle, Clock, Ruler } from 'lucide-react'
 import type { OrderComfortType } from '../../shared/api/types/orderTypes'
 import { createOrder } from '../../shared/api/services/orderService'
 import {
@@ -10,23 +12,51 @@ import {
 } from '../../shared/lib/schemas/orderSchemas'
 import { calculatePriceByN } from '../../shared/lib/calculatePriceByN'
 import { useAuthStore } from '../../shared/lib/stores/authStore'
-import {
-  canCreateOrder,
-  useOrderCreationStore,
-} from '../../shared/lib/stores/orderCreationStore'
-import { geocodeToCoords, suggestAddress } from '../../shared/lib/ymaps/ymapsServices'
+import { useOrderCreationStore } from '../../shared/lib/stores/orderCreationStore'
 import { FormError } from '../../shared/ui/form/FormError'
-import { FormInput } from '../../shared/ui/form/FormInput'
+import {
+  AddressFieldCard,
+  type SuggestField,
+} from './components/AddressFieldCard'
+import { StepPanelBody, StepPanelCard, StepPanelHeader } from './components/StepPanel'
 
-type SuggestField = 'fromAddress' | 'toAddress'
+const comfortOptions: {
+  value: OrderComfortType
+  title: string
+  subtitle: string
+  accent: string
+  description: string
+}[] = [
+  {
+    value: 'economy',
+    title: 'Эконом',
+    subtitle: 'Быстрый и выгодный',
+    accent: 'text-emerald-600',
+    description: 'Для коротких поездок',
+  },
+  {
+    value: 'comfort',
+    title: 'Комфорт',
+    subtitle: 'Баланс цены и удобства',
+    accent: 'text-blue-600',
+    description: 'Повышенное качество',
+  },
+  {
+    value: 'business',
+    title: 'Бизнес',
+    subtitle: 'Премиум подача',
+    accent: 'text-amber-600',
+    description: 'Для деловых встреч',
+  },
+]
 
 export function OrderPanelForm() {
   const queryClient = useQueryClient()
   const { user } = useAuthStore()
+  const navigate = useNavigate()
 
   const error = useOrderCreationStore((s) => s.error)
   const successMessage = useOrderCreationStore((s) => s.successMessage)
-  const activePoint = useOrderCreationStore((s) => s.activePoint)
   const fromAddressFromStore = useOrderCreationStore((s) => s.fromAddress)
   const toAddressFromStore = useOrderCreationStore((s) => s.toAddress)
   const pointACoords = useOrderCreationStore((s) => s.pointACoords)
@@ -34,10 +64,6 @@ export function OrderPanelForm() {
   const routeInfo = useOrderCreationStore((s) => s.routeInfo)
 
   const setActivePoint = useOrderCreationStore((s) => s.setActivePoint)
-  const setFromAddress = useOrderCreationStore((s) => s.setFromAddress)
-  const setToAddress = useOrderCreationStore((s) => s.setToAddress)
-  const setPointACoords = useOrderCreationStore((s) => s.setPointACoords)
-  const setPointBCoords = useOrderCreationStore((s) => s.setPointBCoords)
   const setActiveOrder = useOrderCreationStore((s) => s.setActiveOrder)
   const resetMessages = useOrderCreationStore((s) => s.resetMessages)
   const setError = useOrderCreationStore((s) => s.setError)
@@ -52,120 +78,21 @@ export function OrderPanelForm() {
     [fromAddressFromStore, toAddressFromStore]
   )
 
-  const {
-    register,
-    handleSubmit,
-    getValues,
-    setValue,
-    watch,
-    formState: { errors },
-  } = useForm<OrderPanelFormValues>({
+  const formMethods = useForm<OrderPanelFormValues>({
     resolver: zodResolver(orderPanelSchema),
     defaultValues,
   })
 
-  const [fromSuggestions, setFromSuggestions] = useState<string[]>([])
-  const [toSuggestions, setToSuggestions] = useState<string[]>([])
-  const [isSuggestingFrom, setIsSuggestingFrom] = useState(false)
-  const [isSuggestingTo, setIsSuggestingTo] = useState(false)
+  const {
+    handleSubmit,
+    watch,
+    setValue,
+    formState: { errors },
+  } = formMethods
+
   const [openSuggestField, setOpenSuggestField] = useState<SuggestField | null>(null)
 
-  const fromRequestIdRef = useRef(0)
-  const toRequestIdRef = useRef(0)
-
-  const confirmedFromAddressRef = useRef<string>('')
-  const confirmedToAddressRef = useRef<string>('')
-
-  useEffect(() => {
-    const current = (getValues('fromAddress') ?? '').trim()
-    const next = (fromAddressFromStore ?? '').trim()
-    if (next && next !== current) {
-      confirmedFromAddressRef.current = next
-      setValue('fromAddress', next, { shouldDirty: true, shouldTouch: true })
-    }
-  }, [fromAddressFromStore, getValues, setValue])
-
-  useEffect(() => {
-    const current = (getValues('toAddress') ?? '').trim()
-    const next = (toAddressFromStore ?? '').trim()
-    if (next && next !== current) {
-      confirmedToAddressRef.current = next
-      setValue('toAddress', next, { shouldDirty: true, shouldTouch: true })
-    }
-  }, [toAddressFromStore, getValues, setValue])
-
-  const fromAddress = watch('fromAddress') ?? ''
-  const toAddress = watch('toAddress') ?? ''
-
-  const fromAddressField = register('fromAddress')
-  const toAddressField = register('toAddress')
-
-  useEffect(() => {
-    const query = (fromAddress ?? '').trim()
-    if (query.length < 3) {
-      setFromSuggestions([])
-      setIsSuggestingFrom(false)
-      return
-    }
-
-    setIsSuggestingFrom(true)
-
-    const requestId = ++fromRequestIdRef.current
-    const t = window.setTimeout(async () => {
-      try {
-        const items = await suggestAddress(query)
-        if (fromRequestIdRef.current !== requestId) return
-        setFromSuggestions(items)
-      } catch {
-        if (fromRequestIdRef.current !== requestId) return
-        setFromSuggestions([])
-      } finally {
-        if (fromRequestIdRef.current === requestId) {
-          setIsSuggestingFrom(false)
-        }
-      }
-    }, 1000)
-
-    return () => {
-      window.clearTimeout(t)
-    }
-  }, [fromAddress])
-
-  useEffect(() => {
-    const query = (toAddress ?? '').trim()
-    if (query.length < 3) {
-      setToSuggestions([])
-      setIsSuggestingTo(false)
-      return
-    }
-
-    setIsSuggestingTo(true)
-
-    const requestId = ++toRequestIdRef.current
-    const t = window.setTimeout(async () => {
-      try {
-        const items = await suggestAddress(query)
-        if (toRequestIdRef.current !== requestId) return
-        setToSuggestions(items)
-      } catch {
-        if (toRequestIdRef.current !== requestId) return
-        setToSuggestions([])
-      } finally {
-        if (toRequestIdRef.current === requestId) {
-          setIsSuggestingTo(false)
-        }
-      }
-    }, 1000)
-
-    return () => {
-      window.clearTimeout(t)
-    }
-  }, [toAddress])
-
   const comfortType = watch('comfortType') as OrderComfortType
-
-  const priceByN = routeInfo ? calculatePriceByN(routeInfo.distanceMeters, comfortType) : null
-  const canCreateOrderNow = Boolean(user) && canCreateOrder({ pointACoords, pointBCoords, routeInfo })
 
   const { mutateAsync, isPending: isOrderCreating } = useMutation({
     mutationFn: createOrder,
@@ -203,6 +130,7 @@ export function OrderPanelForm() {
       })
 
       setActiveOrder(createdOrder)
+      setActivePoint(null)
       queryClient.setQueryData(['customer', 'currentOrder'], createdOrder)
       void queryClient.invalidateQueries({ queryKey: ['customer', 'currentOrder'] })
 
@@ -213,238 +141,167 @@ export function OrderPanelForm() {
   })
 
   return (
-    <div className="absolute top-4 left-4 right-4 md:right-auto md:w-[420px] bg-white/95 backdrop-blur rounded-lg border border-gray-200 p-4 shadow">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold">Заказ такси</h2>
-      </div>
+    <div className="absolute top-4 left-4 right-4 md:right-auto md:w-[460px] pointer-events-auto">
+      <StepPanelCard>
+        <StepPanelHeader
+          stepBadge="Шаг 1 · Маршрут"
+          statusText={routeInfo ? 'Маршрут рассчитан' : 'Выберите точки'}
+          title="Укажите подачу и пункт назначения — стоимость обновится."
+        />
 
-      <form onSubmit={submit} className="mt-3 space-y-3">
-        <FormError message={error ?? undefined} />
-
-        <div>
-          <FormInput
-            label="Откуда"
-            type="text"
-            autoComplete="off"
-            placeholder="Например: Минск, пр-т Независимости 10"
-            error={errors.fromAddress?.message}
-            {...fromAddressField}
-            onChange={(e) => {
-              fromAddressField.onChange(e)
-              setFromAddress(e.target.value)
-              resetMessages()
-            }}
-            onFocus={() => setOpenSuggestField('fromAddress')}
-            onBlur={(e) => {
-              fromAddressField.onBlur(e)
-              setOpenSuggestField(null)
-
-              const current = (getValues('fromAddress') ?? '').trim()
-              const confirmed = (confirmedFromAddressRef.current ?? '').trim()
-
-              if (!current || current !== confirmed) {
-                confirmedFromAddressRef.current = ''
-                setValue('fromAddress', '', { shouldDirty: true, shouldTouch: true })
-              }
-            }}
-          />
-
-          {openSuggestField === 'fromAddress' ? (
-            <div className="mt-2">
-              {isSuggestingFrom ? (
-                <div className="text-xs text-gray-500">Подсказки...</div>
-              ) : null}
-
-              {!isSuggestingFrom && fromSuggestions.length ? (
-                <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-                  {fromSuggestions.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => {
-                        confirmedFromAddressRef.current = s
-                        setValue('fromAddress', s, { shouldDirty: true, shouldTouch: true })
-                        setFromAddress(s)
-                        setOpenSuggestField(null)
-
-                        resetMessages()
-
-                        geocodeToCoords(s)
-                          .then((coords) => {
-                            setPointACoords(coords)
-                            setActivePoint('A')
-                          })
-                          .catch(() => {
-                            setError('Не удалось найти адрес на карте')
-                          })
-                      }}
-                      className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                    >
-                      {s}
-                    </button>
-                  ))}
+        <FormProvider {...formMethods}>
+          <StepPanelBody>
+            <form onSubmit={submit} className="space-y-6">
+              {error ? (
+                <div className="flex items-start gap-3 rounded-2xl border border-danger/30 bg-danger/5 px-4 py-3 text-sm text-danger">
+                  <AlertCircle className="h-5 w-5 shrink-0" />
+                  <div>
+                    <p className="font-semibold">Не получилось оформить заказ</p>
+                    <p>{error}</p>
+                  </div>
                 </div>
               ) : null}
-            </div>
-          ) : null}
 
-          <div className="mt-2 grid grid-cols-1 gap-2">
-            <button
-              type="button"
-              onClick={() => setActivePoint('A')}
-              className={`rounded-xl border px-4 py-2 text-sm font-medium transition ${
-                activePoint === 'A'
-                  ? 'border-blue-600 bg-blue-50 text-blue-800'
-                  : 'border-gray-200 bg-white text-gray-800 hover:bg-gray-50'
-              }`}
-            >
-              Указать на карте
-            </button>
-          </div>
-        </div>
-
-        <div>
-          <FormInput
-            label="Куда"
-            type="text"
-            autoComplete="off"
-            placeholder="Например: Минск, ул. Немига 5"
-            error={errors.toAddress?.message}
-            {...toAddressField}
-            onChange={(e) => {
-              toAddressField.onChange(e)
-              setToAddress(e.target.value)
-              resetMessages()
-            }}
-            onFocus={() => setOpenSuggestField('toAddress')}
-            onBlur={(e) => {
-              toAddressField.onBlur(e)
-              setOpenSuggestField(null)
-
-              const current = (getValues('toAddress') ?? '').trim()
-              const confirmed = (confirmedToAddressRef.current ?? '').trim()
-
-              if (!current || current !== confirmed) {
-                confirmedToAddressRef.current = ''
-                setValue('toAddress', '', { shouldDirty: true, shouldTouch: true })
-              }
-            }}
-          />
-
-          {openSuggestField === 'toAddress' ? (
-            <div className="mt-2">
-              {isSuggestingTo ? (
-                <div className="text-xs text-gray-500">Подсказки...</div>
-              ) : null}
-
-              {!isSuggestingTo && toSuggestions.length ? (
-                <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-                  {toSuggestions.map((s) => (
-                    <button
-                      key={s}
-                      type="button"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => {
-                        confirmedToAddressRef.current = s
-                        setValue('toAddress', s, { shouldDirty: true, shouldTouch: true })
-                        setToAddress(s)
-                        setOpenSuggestField(null)
-
-                        resetMessages()
-
-                        geocodeToCoords(s)
-                          .then((coords) => {
-                            setPointBCoords(coords)
-                            setActivePoint('B')
-                          })
-                          .catch(() => {
-                            setError('Не удалось найти адрес на карте')
-                          })
-                      }}
-                      className="block w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                    >
-                      {s}
-                    </button>
-                  ))}
+              {successMessage ? (
+                <div className="rounded-2xl border border-success/30 bg-success/5 px-4 py-3 text-sm text-success">
+                  {successMessage}
                 </div>
               ) : null}
-            </div>
-          ) : null}
 
-          <div className="mt-2 grid grid-cols-1 gap-2">
-            <button
-              type="button"
-              onClick={() => setActivePoint('B')}
-              className={`rounded-xl border px-4 py-2 text-sm font-medium transition ${
-                activePoint === 'B'
-                  ? 'border-red-600 bg-red-50 text-red-800'
-                  : 'border-gray-200 bg-white text-gray-800 hover:bg-gray-50'
-              }`}
-            >
-              Указать на карте
-            </button>
-          </div>
-        </div>
+              <div className="space-y-6">
+                <AddressFieldCard
+                  point="A"
+                  label="Откуда (A)"
+                  placeholder="Минск, пр-т Независимости 10"
+                  accent={{
+                    label: 'text-emerald-600',
+                    dot: 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.6)]',
+                    buttonActive: 'border-emerald-200 bg-emerald-100 text-emerald-700',
+                    buttonIdle: 'border-emerald-200 text-emerald-600 hover:bg-emerald-50',
+                    compass: 'text-emerald-500',
+                    dropdownOffset: { left: 48, right: 32 },
+                  }}
+                  openSuggestField={openSuggestField}
+                  setOpenSuggestField={setOpenSuggestField}
+                />
 
-        <div>
-          <label className="block text-sm text-gray-700">Тип комфорта</label>
-          <select
-            className="mt-1 w-full border border-gray-300 rounded px-3 py-2"
-            {...register('comfortType')}
-          >
-            <option value="economy">Эконом</option>
-            <option value="comfort">Комфорт</option>
-            <option value="business">Бизнес</option>
-          </select>
-          <FormError message={errors.comfortType?.message} />
-        </div>
+                <AddressFieldCard
+                  point="B"
+                  label="Куда (B)"
+                  placeholder="Минск, ул. Немига 5"
+                  accent={{
+                    label: 'text-rose-600',
+                    dot: 'bg-rose-500 shadow-[0_0_10px_rgba(244,63,94,0.6)]',
+                    buttonActive: 'border-rose-200 bg-rose-100 text-rose-700',
+                    buttonIdle: 'border-rose-200 text-rose-600 hover:bg-rose-50',
+                    compass: 'text-rose-500',
+                    dropdownOffset: { left: 48, right: 32 },
+                  }}
+                  openSuggestField={openSuggestField}
+                  setOpenSuggestField={setOpenSuggestField}
+                />
+              </div>
 
-        <div className="rounded-xl border border-gray-200 bg-white px-3 py-2">
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <div className="text-[11px] text-gray-500">Длина</div>
-              <div className="text-sm font-semibold text-gray-900">
-                {routeInfo ? routeInfo.distanceText : '—'}
+            <div className="rounded-3xl border border-gray-200 bg-white/90 p-5 shadow-sm">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-2xl bg-white p-2 shadow">
+                    <Ruler className="h-5 w-5 text-gray-900" />
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Дистанция</p>
+                    <p className="text-base font-semibold text-gray-900">
+                      {routeInfo ? routeInfo.distanceText : '—'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="rounded-2xl bg-white p-2 shadow">
+                    <Clock className="h-5 w-5 text-gray-900" />
+                  </div>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Время</p>
+                    <p className="text-base font-semibold text-gray-900">
+                      {routeInfo ? routeInfo.durationText : '—'}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
+
             <div>
-              <div className="text-[11px] text-gray-500">Время</div>
-              <div className="text-sm font-semibold text-gray-900">
-                {routeInfo ? routeInfo.durationText : '—'}
+              <FormError message={errors.comfortType?.message} />
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                {comfortOptions.map((option) => {
+                  const active = comfortType === option.value
+                  const optionPrice =
+                    routeInfo && routeInfo.distanceMeters
+                      ? calculatePriceByN(routeInfo.distanceMeters, option.value)
+                      : null
+
+                  return (
+                    <button
+                      key={option.value}
+                      type="button"
+                      onClick={() =>
+                        setValue('comfortType', option.value, {
+                          shouldDirty: true,
+                          shouldTouch: true,
+                        })
+                      }
+                      className={`text-left rounded-2xl border p-4 transition ${
+                        active
+                          ? 'border-gray-900 bg-gray-900 text-white shadow-xl shadow-gray-900/20'
+                          : 'border-gray-200 bg-white text-gray-900 hover:border-gray-400'
+                      }`}
+                    >
+                      <div
+                        className={`text-xs font-semibold uppercase ${
+                          active ? 'text-white/80' : option.accent
+                        }`}
+                      >
+                        {option.title}
+                      </div>
+                      <div className="mt-1 text-sm font-semibold">{option.subtitle}</div>
+                      <p className={`mt-2 text-xs ${active ? 'text-white/70' : 'text-gray-500'}`}>
+                        {option.description}
+                      </p>
+                      <div className="mt-3 text-xl font-semibold">
+                        {optionPrice !== null ? `${optionPrice} BYN` : '—'}
+                      </div>
+                    </button>
+                  )
+                })}
               </div>
             </div>
-            <div>
-              <div className="text-[11px] text-gray-500">Стоимость</div>
-              <div className="text-sm font-semibold text-gray-900">
-                {priceByN !== null ? `${priceByN} BYN` : '—'}
+
+              <div className="space-y-3">
+                {user ? (
+                  <button
+                    type="submit"
+                    disabled={!pointACoords || !pointBCoords || !routeInfo || isOrderCreating}
+                    className={`w-full rounded-2xl px-5 py-4 text-base font-semibold transition focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/40 ${
+                      !pointACoords || !pointBCoords || !routeInfo || isOrderCreating
+                        ? 'border border-gray-200 bg-gray-100 text-gray-500'
+                        : 'border border-transparent bg-gradient-to-r from-gray-900 to-gray-800 text-white shadow-lg shadow-gray-900/30 hover:translate-y-0.5'
+                    }`}
+                  >
+                    {isOrderCreating ? 'Создаю…' : 'Создать заказ'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => navigate('/login')}
+                    className="w-full rounded-2xl border border-gray-900 bg-gray-900 px-5 py-4 text-base font-semibold text-white shadow-lg shadow-gray-900/30 transition hover:translate-y-0.5 focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-primary/40"
+                  >
+                    Войдите, чтобы оформить
+                  </button>
+                )}
               </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 gap-2">
-          <button
-            type="submit"
-            disabled={!canCreateOrderNow || isOrderCreating}
-            className={`px-3 py-2 rounded border text-sm ${
-              !canCreateOrderNow || isOrderCreating
-                ? 'bg-gray-200 text-gray-500 border-gray-200'
-                : 'bg-green-600 text-white border-green-600'
-            }`}
-          >
-            {isOrderCreating ? 'Создаю...' : 'Создать заказ'}
-          </button>
-        </div>
-
-        {!user ? (
-          <p className="text-sm text-gray-600">Чтобы создать заказ, нужно войти в аккаунт.</p>
-        ) : null}
-
-        {successMessage ? (
-          <p className="text-sm text-green-700">{successMessage}</p>
-        ) : null}
-      </form>
+            </form>
+          </StepPanelBody>
+        </FormProvider>
+      </StepPanelCard>
     </div>
   )
 }

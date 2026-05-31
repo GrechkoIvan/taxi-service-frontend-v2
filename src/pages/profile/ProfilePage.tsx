@@ -1,6 +1,20 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  Car as CarIcon,
+  Clock,
+  History,
+  Mail,
+  MapPin,
+  Phone,
+  Ruler,
+  Shield,
+  Star,
+  User as UserIcon,
+  Wallet,
+} from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import { useAuthStore } from '../../shared/lib/stores/authStore'
 import { USER_ROLES } from '../../shared/lib/constants/authConstants'
 import { getCustomerOrdersHistory } from '../../shared/api/services/customerOrderService'
@@ -10,6 +24,7 @@ import {
   getDriverOrdersHistory,
 } from '../../shared/api/services/driverService'
 import { createReview } from '../../shared/api/services/reviewService'
+import { StarRating } from '../../shared/ui/StarRating'
 
 const ORDERS_PER_PAGE = 6
 const REVIEWS_PER_PAGE = 5
@@ -55,6 +70,44 @@ function formatRating(value: number | undefined) {
   return v.toFixed(1)
 }
 
+type InfoRowProps = {
+  icon: LucideIcon
+  label: string
+  value: string
+}
+
+function InfoRow({ icon: Icon, label, value }: InfoRowProps) {
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-gray-50 px-3 py-2">
+      <span className="rounded-2xl bg-white p-2 text-gray-900 shadow-sm">
+        <Icon className="h-4 w-4" />
+      </span>
+      <div>
+        <p className="text-[11px] uppercase tracking-wide text-gray-500">{label}</p>
+        <p className="text-sm font-semibold text-gray-900">{value}</p>
+      </div>
+    </div>
+  )
+}
+
+type MetricProps = {
+  icon: LucideIcon
+  label: string
+  value: string
+}
+
+function MetricPill({ icon: Icon, label, value }: MetricProps) {
+  return (
+    <div className="flex items-center gap-2 rounded-2xl border border-gray-100 bg-gray-50 px-3 py-2">
+      <Icon className="h-4 w-4 text-gray-500" />
+      <div>
+        <p className="text-[11px] uppercase tracking-wide text-gray-500">{label}</p>
+        <p className="text-sm font-semibold text-gray-900">{value}</p>
+      </div>
+    </div>
+  )
+}
+
 export function ProfilePage() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -74,7 +127,7 @@ export function ProfilePage() {
         <div className="max-w-2xl mx-auto text-center">
           <h1 className="text-3xl font-bold mb-4 text-gray-900">Профиль</h1>
           <p className="text-gray-600 mb-6">Нужно войти в аккаунт, чтобы открыть профиль.</p>
-          <button className="btn btn-primary px-6 py-3" onClick={() => navigate('/auth')}>
+          <button className="btn btn-primary px-6 py-3" onClick={() => navigate('/login')}>
             Войти
           </button>
         </div>
@@ -153,51 +206,68 @@ export function ProfilePage() {
         <h1 className="text-2xl font-bold text-gray-900">Профиль</h1>
 
         <div className="mt-4 grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-4 items-start">
-          <div className="self-start">
-            <div className="rounded-xl border border-gray-200 bg-white p-4">
-              <div className="text-sm text-gray-500">Имя</div>
-              <div className="text-lg font-semibold text-gray-900">{user?.name ?? '—'}</div>
+          <div className="self-start space-y-4">
+            <div className="rounded-3xl border border-gray-100 bg-white/90 p-5 shadow-sm">
+              <div className="flex items-center gap-3">
+                <div className="rounded-full bg-gray-900 text-white p-3">
+                  <UserIcon className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-[11px] uppercase tracking-wide text-gray-500">Профиль</p>
+                  <p className="text-lg font-semibold text-gray-900">{user?.name ?? '—'}</p>
+                </div>
+              </div>
 
-              <div className="mt-4 text-sm text-gray-500">Телефон</div>
-              <div className="text-base font-semibold text-gray-900">{user?.phone ?? '—'}</div>
-
-              <div className="mt-4 text-sm text-gray-500">Email</div>
-              <div className="text-base font-semibold text-gray-900">{user?.email ?? '—'}</div>
-
-              <div className="mt-4 text-sm text-gray-500">Роль</div>
-              <div className="text-base font-semibold text-gray-900">{getRoleLabel(user?.role)}</div>
+              <div className="mt-5 grid grid-cols-1 gap-3">
+                <InfoRow icon={Phone} label="Телефон" value={user?.phone ?? '—'} />
+                <InfoRow icon={Mail} label="Email" value={user?.email ?? '—'} />
+                <InfoRow icon={Shield} label="Роль" value={getRoleLabel(user?.role)} />
+              </div>
             </div>
 
             {isDriver ? (
-              <div className="mt-4 rounded-xl border border-gray-200 bg-white p-4">
-                <div className="text-base font-semibold text-gray-900">Машина</div>
+              <div className="rounded-3xl border border-gray-100 bg-white/90 p-5 shadow-sm">
+                <div className="flex items-center gap-3">
+                  <div className="rounded-full bg-gray-900 text-white p-3">
+                    <CarIcon className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <p className="text-[11px] uppercase tracking-wide text-gray-500">Автомобиль</p>
+                    <p className="text-base font-semibold text-gray-900">
+                      {driverMeProfileQuery.data?.car
+                        ? `${driverMeProfileQuery.data.car.make} ${driverMeProfileQuery.data.car.model}`
+                        : 'Данные не заполнены'}
+                    </p>
+                  </div>
+                </div>
 
                 {driverMeProfileQuery.isLoading ? (
-                  <div className="mt-2 text-sm text-gray-600">Загрузка...</div>
+                  <div className="mt-3 text-sm text-gray-600">Загрузка…</div>
                 ) : driverMeProfileQuery.error ? (
-                  <div className="mt-2 text-sm text-red-600">{String(driverMeProfileQuery.error)}</div>
+                  <div className="mt-3 text-sm text-red-600">{String(driverMeProfileQuery.error)}</div>
                 ) : (
-                  <>
-                    <div className="mt-3 text-sm text-gray-500">Уровень</div>
-                    <div className="text-sm font-semibold text-gray-900">
-                      {getComfortLabel(driverMeProfileQuery.data?.comfortLevel)}
-                    </div>
-
-                    <div className="mt-3 text-sm text-gray-500">Авто</div>
+                  <div className="mt-4 space-y-3">
+                    <MetricPill
+                      icon={Star}
+                      label="Уровень комфорта"
+                      value={getComfortLabel(driverMeProfileQuery.data?.comfortLevel)}
+                    />
                     {driverMeProfileQuery.data?.car ? (
-                      <div className="text-sm font-semibold text-gray-900">
-                        {driverMeProfileQuery.data.car.make} {driverMeProfileQuery.data.car.model}
-                        <div className="mt-1 text-xs font-medium text-gray-600">
+                      <div className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
+                        <p className="text-sm font-semibold text-gray-900">
+                          {driverMeProfileQuery.data.car.make} {driverMeProfileQuery.data.car.model}
+                        </p>
+                        <p className="text-xs text-gray-500 mt-1">
                           {driverMeProfileQuery.data.car.color} ·{' '}
-                          <span className="font-semibold text-gray-900">
+                          <span className="font-semibold tracking-widest text-gray-900">
                             {driverMeProfileQuery.data.car.plate}
                           </span>
-                        </div>
+                        </p>
                       </div>
                     ) : (
-                      <div className="text-sm text-gray-600">Не заполнено</div>
+                      <div className="text-sm text-gray-600">Данные автомобиля не заполнены.</div>
                     )}
-                  </>
+                  </div>
                 )}
               </div>
             ) : null}
@@ -205,30 +275,34 @@ export function ProfilePage() {
 
           <div className="self-start flex flex-col gap-4">
             {isDriver ? (
-              <div className="rounded-xl border border-gray-200 bg-white p-4">
-                <div className="flex items-center justify-between gap-3">
+              <div className="rounded-3xl border border-gray-100 bg-white/90 p-5 shadow-sm">
+                <div className="flex items-center gap-2">
+                  <Star className="h-5 w-5 text-gray-900" />
                   <h2 className="text-lg font-semibold text-gray-900">Рейтинг и отзывы</h2>
                 </div>
 
-                <div className="mt-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
-                  <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">Рейтинг</div>
+                <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50 p-4">
+                  <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">Средний рейтинг</div>
                   {driverMeReviewsQuery.isLoading ? (
-                    <div className="mt-1 text-sm text-gray-600">Загрузка...</div>
+                    <div className="mt-2 text-sm text-gray-600">Загрузка…</div>
                   ) : driverMeReviewsQuery.error ? (
-                    <div className="mt-1 text-sm text-red-600">{String(driverMeReviewsQuery.error)}</div>
+                    <div className="mt-2 text-sm text-red-600">{String(driverMeReviewsQuery.error)}</div>
                   ) : (
-                    <div className="mt-1 text-lg font-semibold text-gray-900">
-                      {formatRating(driverMeReviewsQuery.data?.averageRating)} / 5
-                      <span className="ml-2 text-sm font-medium text-gray-600">
-                        ({driverMeReviewsQuery.data?.totalReviews ?? 0})
-                      </span>
+                    <div className="mt-3">
+                      <div className="text-3xl font-bold text-gray-900">
+                        {formatRating(driverMeReviewsQuery.data?.averageRating)}
+                        <span className="ml-1 text-base font-semibold text-gray-500">/ 5</span>
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500">
+                        На основе {driverMeReviewsQuery.data?.totalReviews ?? 0} отзывов
+                      </p>
                     </div>
                   )}
                 </div>
 
                 {!driverMeReviewsQuery.isLoading && !driverMeReviewsQuery.error ? (
                   (driverMeReviewsQuery.data?.reviews?.length ?? 0) === 0 ? (
-                    <div className="mt-3 text-sm text-gray-600">Отзывов пока нет.</div>
+                    <div className="mt-4 text-sm text-gray-600">Отзывов пока нет.</div>
                   ) : (
                     <>
                       <div className="mt-4 flex items-center justify-between gap-3">
@@ -258,17 +332,20 @@ export function ProfilePage() {
                         </div>
                       </div>
 
-                      <div className="mt-3 flex flex-col gap-2">
+                      <div className="mt-3 flex flex-col gap-3">
                         {driverReviewsItems?.map((r) => (
-                          <div key={String(r.id)} className="rounded-lg border border-gray-200 bg-white p-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <div className="text-sm font-semibold text-gray-900">
-                                {r.customerName ?? 'Клиент'}
+                          <div key={String(r.id)} className="rounded-2xl border border-gray-100 bg-white px-4 py-3 shadow-sm">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                              <div>
+                                <p className="text-sm font-semibold text-gray-900">{r.customerName ?? 'Клиент'}</p>
+                                <p className="text-xs text-gray-500">{formatDate(r.createdAt)}</p>
                               </div>
-                              <div className="text-xs font-semibold text-gray-700">{r.rating} / 5</div>
+                              <div className="flex items-center gap-2">
+                                <StarRating value={r.rating ?? 0} readOnly size="sm" className="justify-start" />
+                                <span className="text-sm font-semibold text-gray-900">{r.rating} / 5</span>
+                              </div>
                             </div>
-                            <div className="text-xs text-gray-500 mt-0.5">{formatDate(r.createdAt)}</div>
-                            {r.text ? <div className="text-sm text-gray-800 mt-2">{r.text}</div> : null}
+                            {r.text ? <p className="mt-2 text-sm text-gray-800">{r.text}</p> : null}
                           </div>
                         ))}
                       </div>
@@ -278,25 +355,26 @@ export function ProfilePage() {
               </div>
             ) : null}
 
-            <div className="rounded-xl border border-gray-200 bg-white p-4">
-              <div className="flex items-center justify-between gap-3">
+            <div className="rounded-3xl border border-gray-100 bg-white/90 p-5 shadow-sm">
+              <div className="flex items-center gap-2">
+                <History className="h-5 w-5 text-gray-900" />
                 <h2 className="text-lg font-semibold text-gray-900">История поездок</h2>
               </div>
 
               {isCustomer ? (
-                <div className="mt-3">
+                <div className="mt-4">
                   {customerHistoryQuery.isLoading ? (
-                    <div className="text-gray-600">Загрузка...</div>
+                    <div className="text-gray-600">Загрузка…</div>
                   ) : customerHistoryQuery.error ? (
                     <div className="text-red-600">{String(customerHistoryQuery.error)}</div>
                   ) : (customerHistoryQuery.data?.length ?? 0) === 0 ? (
                     <div className="text-gray-600">Пока нет поездок.</div>
                   ) : (
                     <>
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm text-gray-600">
+                      <div className="flex items-center justify-between gap-3 text-sm text-gray-600">
+                        <span>
                           Страница {customerOrdersPageSafe} из {customerOrdersTotalPages}
-                        </div>
+                        </span>
                         <div className="flex gap-2">
                           <button
                             type="button"
@@ -320,61 +398,87 @@ export function ProfilePage() {
                         </div>
                       </div>
 
-                      <div className="mt-3 flex flex-col gap-3">
+                      <div className="mt-4 flex flex-col gap-3">
                         {customerOrdersItems?.map((item) => {
                           const o = item.order
                           const hasReview = Boolean(item.review)
                           const canReview = o.status === 'finished' && !hasReview
+                          const durationMinutes = Math.max(1, Math.round((o.durationSeconds ?? 0) / 60))
 
                           return (
-                            <div key={String(o.id)} className="rounded-xl border border-gray-200 p-3">
-                              <div className="flex items-start justify-between gap-3">
+                            <div key={String(o.id)} className="rounded-2xl border border-gray-100 bg-white px-4 py-4 shadow-sm">
+                              <div className="flex flex-wrap items-start justify-between gap-3">
                                 <div>
-                                  <div className="text-sm font-semibold text-gray-900">Заказ #{o.id}</div>
+                                  <div className="text-sm font-semibold text-gray-900">
+                                    Заказ{' '}
+                                    <span className="rounded-full bg-gray-900/90 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-white">
+                                      #{o.id}
+                                    </span>
+                                  </div>
                                   <div className="text-xs text-gray-500 mt-0.5">{formatDate(o.createdAt)}</div>
                                 </div>
-                                <div className="text-xs font-semibold text-gray-700">
+                                <span className="rounded-full bg-gray-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-700">
                                   {getOrderStatusLabel(o.status)}
+                                </span>
+                              </div>
+
+                              <div className="mt-3 space-y-3 text-sm text-gray-900">
+                                <div className="flex items-start gap-3">
+                                  <span className="rounded-2xl bg-emerald-50 p-2 text-emerald-600 shadow-sm">
+                                    <MapPin className="h-4 w-4" />
+                                  </span>
+                                  <div>
+                                    <p className="text-xs uppercase tracking-wide text-gray-500">Подача</p>
+                                    <p className="font-semibold">{o.fromAddress ?? '—'}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-start gap-3">
+                                  <span className="rounded-2xl bg-rose-50 p-2 text-rose-600 shadow-sm">
+                                    <MapPin className="h-4 w-4" />
+                                  </span>
+                                  <div>
+                                    <p className="text-xs uppercase tracking-wide text-gray-500">Назначение</p>
+                                    <p className="font-semibold">{o.toAddress ?? '—'}</p>
+                                  </div>
                                 </div>
                               </div>
 
-                              <div className="mt-2 text-sm text-gray-800">
-                                <div className="truncate">
-                                  <span className="text-gray-500">A:</span> {o.fromAddress ?? '—'}
-                                </div>
-                                <div className="truncate">
-                                  <span className="text-gray-500">B:</span> {o.toAddress ?? '—'}
-                                </div>
-                              </div>
-
-                              <div className="mt-2 text-xs text-gray-600">
-                                {Math.round(o.distanceMeters)} м · {Math.round(o.durationSeconds)} сек ·{' '}
-                                {o.priceByN} BYN
+                              <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                <MetricPill icon={Ruler} label="Дистанция" value={`${Math.round(o.distanceMeters ?? 0)} м`} />
+                                <MetricPill icon={Clock} label="Время" value={`${durationMinutes} мин`} />
+                                <MetricPill icon={Wallet} label="Стоимость" value={`${o.priceByN ?? '—'} BYN`} />
                               </div>
 
                               {hasReview ? (
-                                <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                                  <div className="text-xs text-gray-500">Отзыв оставлен</div>
-                                  <div className="text-sm font-semibold text-gray-900">
-                                    Оценка: {item.review?.rating}
+                                <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
+                                  <div className="flex flex-wrap items-center justify-between gap-2">
+                                    <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                      Отзыв оставлен
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <StarRating value={item.review?.rating ?? 0} readOnly size="sm" className="justify-start" />
+                                      <span className="text-sm font-semibold text-gray-900">
+                                        {item.review?.rating} / 5
+                                      </span>
+                                    </div>
                                   </div>
                                   {item.review?.text ? (
-                                    <div className="text-sm text-gray-800 mt-1">{item.review.text}</div>
+                                    <p className="mt-2 text-sm text-gray-800">{item.review.text}</p>
                                   ) : null}
                                 </div>
                               ) : null}
 
                               {canReview ? (
-                                <div className="mt-3">
+                                <div className="mt-4 rounded-2xl border border-gray-100 bg-white px-4 py-3">
                                   {reviewOrderId !== o.id ? (
                                     <button
-                                      className="btn btn-primary px-4 py-2"
+                                      className="w-full rounded-2xl border border-gray-900 bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow hover:translate-y-0.5 transition"
                                       onClick={() => setReviewOrderId(o.id)}
                                     >
                                       Оставить отзыв
                                     </button>
                                   ) : (
-                                    <div className="rounded-lg border border-gray-200 bg-white p-3">
+                                    <div className="space-y-3">
                                       <div className="flex items-center justify-between gap-2">
                                         <div className="text-sm font-semibold text-gray-900">Отзыв</div>
                                         <button
@@ -386,10 +490,10 @@ export function ProfilePage() {
                                         </button>
                                       </div>
 
-                                      <div className="mt-2">
+                                      <div>
                                         <label className="block text-sm text-gray-700">Оценка</label>
                                         <select
-                                          className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+                                          className="mt-1 w-full rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
                                           value={reviewRating}
                                           onChange={(e) => setReviewRating(Number(e.target.value))}
                                           disabled={createReviewMutation.isPending}
@@ -402,10 +506,10 @@ export function ProfilePage() {
                                         </select>
                                       </div>
 
-                                      <div className="mt-2">
+                                      <div>
                                         <label className="block text-sm text-gray-700">Комментарий</label>
                                         <textarea
-                                          className="mt-1 w-full min-h-[80px] rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
+                                          className="mt-1 w-full min-h-[80px] rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
                                           value={reviewText}
                                           onChange={(e) => setReviewText(e.target.value)}
                                           placeholder="Пару слов о поездке"
@@ -414,7 +518,7 @@ export function ProfilePage() {
                                       </div>
 
                                       <button
-                                        className="btn btn-primary w-full px-4 py-2 mt-3 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="btn btn-primary w-full px-4 py-2 mt-1 disabled:opacity-50 disabled:cursor-not-allowed"
                                         disabled={createReviewMutation.isPending}
                                         onClick={() => {
                                           if (!user?.id) return
@@ -434,7 +538,7 @@ export function ProfilePage() {
                                       </button>
 
                                       {createReviewMutation.error ? (
-                                        <div className="text-sm text-red-600 mt-2">
+                                        <div className="text-sm text-red-600">
                                           {String(createReviewMutation.error)}
                                         </div>
                                       ) : null}
@@ -452,19 +556,19 @@ export function ProfilePage() {
               ) : null}
 
               {isDriver ? (
-                <div className="mt-3">
+                <div className="mt-8 border-t border-gray-100 pt-5">
                   {driverHistoryQuery.isLoading ? (
-                    <div className="text-gray-600">Загрузка...</div>
+                    <div className="text-gray-600">Загрузка…</div>
                   ) : driverHistoryQuery.error ? (
                     <div className="text-red-600">{String(driverHistoryQuery.error)}</div>
                   ) : (driverHistoryQuery.data?.length ?? 0) === 0 ? (
                     <div className="text-gray-600">Пока нет выполненных поездок.</div>
                   ) : (
                     <>
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="text-sm text-gray-600">
+                      <div className="flex items-center justify-between gap-3 text-sm text-gray-600">
+                        <span>
                           Страница {driverOrdersPageSafe} из {driverOrdersTotalPages}
-                        </div>
+                        </span>
                         <div className="flex gap-2">
                           <button
                             type="button"
@@ -488,49 +592,75 @@ export function ProfilePage() {
                         </div>
                       </div>
 
-                      <div className="mt-3 flex flex-col gap-3">
+                      <div className="mt-4 flex flex-col gap-3">
                         {driverOrdersItems?.map((item) => {
                           const o = item.order
                           const review = item.review
+                          const durationMinutes = Math.max(1, Math.round((o.durationSeconds ?? 0) / 60))
 
                           return (
-                            <div key={String(o.id)} className="rounded-xl border border-gray-200 p-3">
-                              <div className="flex items-start justify-between gap-3">
+                            <div key={String(o.id)} className="rounded-2xl border border-gray-100 bg-white px-4 py-4 shadow-sm">
+                              <div className="flex flex-wrap items-start justify-between gap-3">
                                 <div>
-                                  <div className="text-sm font-semibold text-gray-900">Заказ #{o.id}</div>
+                                  <div className="text-sm font-semibold text-gray-900">
+                                    Заказ{' '}
+                                    <span className="rounded-full bg-gray-900/90 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-white">
+                                      #{o.id}
+                                    </span>
+                                  </div>
                                   <div className="text-xs text-gray-500 mt-0.5">{formatDate(o.createdAt)}</div>
                                 </div>
-                                <div className="text-xs font-semibold text-gray-700">
+                                <span className="rounded-full bg-gray-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-700">
                                   {getOrderStatusLabel(o.status)}
+                                </span>
+                              </div>
+
+                              <div className="mt-3 space-y-3 text-sm text-gray-900">
+                                <div className="flex items-start gap-3">
+                                  <span className="rounded-2xl bg-emerald-50 p-2 text-emerald-600 shadow-sm">
+                                    <MapPin className="h-4 w-4" />
+                                  </span>
+                                  <div>
+                                    <p className="text-xs uppercase tracking-wide text-gray-500">Подача</p>
+                                    <p className="font-semibold">{o.fromAddress ?? '—'}</p>
+                                  </div>
+                                </div>
+                                <div className="flex items-start gap-3">
+                                  <span className="rounded-2xl bg-rose-50 p-2 text-rose-600 shadow-sm">
+                                    <MapPin className="h-4 w-4" />
+                                  </span>
+                                  <div>
+                                    <p className="text-xs uppercase tracking-wide text-gray-500">Назначение</p>
+                                    <p className="font-semibold">{o.toAddress ?? '—'}</p>
+                                  </div>
                                 </div>
                               </div>
 
-                              <div className="mt-2 text-sm text-gray-800">
-                                <div className="truncate">
-                                  <span className="text-gray-500">A:</span> {o.fromAddress ?? '—'}
-                                </div>
-                                <div className="truncate">
-                                  <span className="text-gray-500">B:</span> {o.toAddress ?? '—'}
-                                </div>
-                              </div>
-
-                              <div className="mt-2 text-xs text-gray-600">
-                                {Math.round(o.distanceMeters)} м · {Math.round(o.durationSeconds)} сек ·{' '}
-                                {o.priceByN} BYN
+                              <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                <MetricPill icon={Ruler} label="Дистанция" value={`${Math.round(o.distanceMeters ?? 0)} м`} />
+                                <MetricPill icon={Clock} label="Время" value={`${durationMinutes} мин`} />
+                                <MetricPill icon={Wallet} label="Стоимость" value={`${o.priceByN ?? '—'} BYN`} />
                               </div>
 
                               {review ? (
-                                <div className="mt-3 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2">
-                                  <div className="text-xs text-gray-500">Отзыв клиента</div>
-                                  <div className="text-sm font-semibold text-gray-900">
-                                    Оценка: {review.rating}
+                                <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                                      Отзыв клиента
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                      <StarRating value={review.rating ?? 0} readOnly size="sm" className="justify-start" />
+                                      <span className="text-sm font-semibold text-gray-900">{review.rating} / 5</span>
+                                    </div>
                                   </div>
                                   {review.text ? (
-                                    <div className="text-sm text-gray-800 mt-1">{review.text}</div>
-                                  ) : null}
+                                    <p className="mt-2 text-sm text-gray-800">{review.text}</p>
+                                  ) : (
+                                    <p className="mt-2 text-xs text-gray-500">Клиент не оставил комментарий.</p>
+                                  )}
                                 </div>
                               ) : (
-                                <div className="mt-3 text-sm text-gray-600">Отзыва пока нет.</div>
+                                <div className="mt-4 text-sm text-gray-600">Отзыва пока нет.</div>
                               )}
                             </div>
                           )
@@ -542,7 +672,7 @@ export function ProfilePage() {
               ) : null}
 
               {!isCustomer && !isDriver ? (
-                <div className="mt-3 text-gray-600">Профиль для этой роли пока не реализован.</div>
+                <div className="mt-4 text-gray-600">Профиль для этой роли пока не реализован.</div>
               ) : null}
             </div>
           </div>

@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { Car, Clock, MapPin, MessageSquare, Navigation, Phone, Ruler, Star, UserRound, Wallet } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react'
 import {
   cancelCustomerOrder,
   getCustomerDriverPublic,
@@ -9,6 +11,79 @@ import { createReview } from '../../shared/api/services/reviewService'
 import { useAuthStore } from '../../shared/lib/stores/authStore'
 import { useOrderCreationStore } from '../../shared/lib/stores/orderCreationStore'
 import type { Order } from '../../shared/api/types/orderTypes'
+import { StepPanelBody, StepPanelCard, StepPanelHeader, StepPanelSection } from './components/StepPanel'
+import { StarRating } from '../../shared/ui/StarRating'
+
+const comfortMeta = {
+  economy: { label: 'Эконом', pill: 'bg-emerald-50 text-emerald-700' },
+  comfort: { label: 'Комфорт', pill: 'bg-sky-50 text-sky-700' },
+  business: { label: 'Бизнес', pill: 'bg-amber-50 text-amber-700' },
+} as const
+
+function formatDistance(distanceMeters?: number) {
+  if (!distanceMeters && distanceMeters !== 0) return '—'
+  if (distanceMeters >= 1000) {
+    return `${(distanceMeters / 1000).toFixed(1)} км`
+  }
+  return `${Math.round(distanceMeters)} м`
+}
+
+function formatDriverRating(value: number | string | null | undefined) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value.toFixed(1)
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) {
+      return parsed.toFixed(1)
+    }
+  }
+  return '0.0'
+}
+
+function normalizeReviewsCount(value: number | string | null | undefined) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value
+  }
+  if (typeof value === 'string') {
+    const parsed = Number(value)
+    if (Number.isFinite(parsed)) {
+      return parsed
+    }
+  }
+  return 0
+}
+
+function formatDuration(durationSeconds?: number) {
+  if (!durationSeconds && durationSeconds !== 0) return '—'
+  const minutes = Math.max(1, Math.round(durationSeconds / 60))
+  if (minutes < 60) {
+    return `${minutes} мин`
+  }
+  const hours = Math.floor(minutes / 60)
+  const restMinutes = minutes % 60
+  return `${hours} ч ${restMinutes || 0} мин`
+}
+
+type RouteMetricConfig = {
+  icon: LucideIcon
+  label: string
+  value: string
+}
+
+function RouteMetric({ icon: Icon, label, value }: RouteMetricConfig) {
+  return (
+    <div className="flex items-center gap-2 text-sm text-gray-900">
+      <span className="rounded-xl bg-gray-900/90 p-1 text-white">
+        <Icon className="h-3.5 w-3.5" />
+      </span>
+      <div className="leading-tight">
+        <p className="text-[11px] uppercase tracking-wide text-gray-500">{label}</p>
+        <p className="font-semibold">{value}</p>
+      </div>
+    </div>
+  )
+}
 
 function getCustomerStatusLabel(status: Order['status']): string {
   if (status === 'searching_driver') return 'Ищем водителя'
@@ -18,6 +93,33 @@ function getCustomerStatusLabel(status: Order['status']): string {
   if (status === 'finished') return 'Поездка завершена'
   if (status === 'canceled_by_customer') return 'Отменён'
   return status
+}
+
+function RoutePoint({
+  label,
+  value,
+  accent,
+}: {
+  label: string
+  value: string | null | undefined
+  accent: 'emerald' | 'rose'
+}) {
+  const accentClasses =
+    accent === 'emerald'
+      ? 'bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100'
+      : 'bg-rose-50 text-rose-600 ring-1 ring-rose-100'
+
+  return (
+    <div className="flex items-start gap-3">
+      <span className={`mt-0.5 rounded-2xl p-2 shadow-sm ${accentClasses}`}>
+        <MapPin className="h-4 w-4" />
+      </span>
+      <div>
+        <p className="text-xs uppercase tracking-wide text-gray-500">{label}</p>
+        <p className="text-sm font-semibold text-gray-900">{value ?? '—'}</p>
+      </div>
+    </div>
+  )
 }
 
 export function CustomerOrderTracker() {
@@ -42,6 +144,7 @@ export function CustomerOrderTracker() {
   const activeOrder = useOrderCreationStore((s) => s.activeOrder)
   const setActiveOrder = useOrderCreationStore((s) => s.setActiveOrder)
   const resetAll = useOrderCreationStore((s) => s.resetAll)
+  const setActivePoint = useOrderCreationStore((s) => s.setActivePoint)
 
   const shouldPollCurrentOrder =
     Boolean(user) && (activeOrder?.status ?? 'active') !== 'finished' && (activeOrder?.status ?? 'active') !== 'canceled_by_customer'
@@ -64,6 +167,10 @@ export function CustomerOrderTracker() {
       setActiveOrder(null)
     }
   }, [activeOrder?.status, currentOrderQuery.data, setActiveOrder])
+
+  useEffect(() => {
+    setActivePoint(null)
+  }, [setActivePoint])
 
   const cancelMutation = useMutation({
     mutationFn: (orderId: string | number) => cancelCustomerOrder(orderId),
@@ -102,8 +209,17 @@ export function CustomerOrderTracker() {
 
   if (currentOrderQuery.isLoading && !activeOrder) {
     return (
-      <div className="absolute top-4 left-4 right-4 md:right-auto md:w-[420px] bg-white/95 backdrop-blur rounded-lg border border-gray-200 p-4 shadow">
-        <p className="text-gray-600">Загрузка заказа...</p>
+      <div className="absolute top-4 left-4 right-4 md:right-auto md:w-[420px]">
+        <StepPanelCard>
+          <StepPanelHeader
+            stepBadge="Шаг 2 · Отслеживание"
+            statusText="Готовим данные"
+            title="Загружаем текущий заказ…"
+          />
+          <StepPanelBody>
+            <p className="text-sm text-gray-600">Загрузка заказа...</p>
+          </StepPanelBody>
+        </StepPanelCard>
       </div>
     )
   }
@@ -138,183 +254,172 @@ export function CustomerOrderTracker() {
     })
   }
 
-  return (
-    <div className="absolute top-4 left-4 right-4 md:right-auto md:w-[420px] bg-white/95 backdrop-blur rounded-xl border border-gray-200 p-4 shadow">
-      {isFinished ? (
-        <div>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold text-gray-900">Поездка завершена</h2>
-              <div className="text-xs text-gray-500 mt-0.5">Оставь отзыв о водителе</div>
-            </div>
-            <div className="text-xs font-medium text-gray-600">#{safeOrder.id}</div>
+  const comfortBadge = comfortMeta[safeOrder.comfortType] ?? comfortMeta.economy
+  const headerMeta = (
+    <div className="flex w-full flex-wrap items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-700 md:flex-nowrap">
+      <div className="flex items-center gap-2 whitespace-nowrap">
+        <span className="text-gray-600">Номер заказа</span>
+        <span className="text-base font-bold tracking-widest text-gray-900">#{safeOrder.id}</span>
+      </div>
+      <span className={`rounded-full px-3 py-1 text-[10px] ${comfortBadge.pill}`}>{comfortBadge.label}</span>
+    </div>
+  )
+
+  const routeMetrics: RouteMetricConfig[] = [
+    { icon: Ruler, label: 'Дистанция', value: formatDistance(safeOrder.distanceMeters) },
+    { icon: Clock, label: 'В пути', value: formatDuration(safeOrder.durationSeconds) },
+    { icon: Wallet, label: 'Стоимость', value: safeOrder.priceByN ? `${safeOrder.priceByN} BYN` : '—' },
+  ]
+
+  const showDriverSection =
+    Boolean(safeOrder.driverId) &&
+    Boolean(driverPublicQuery.data) &&
+    !driverPublicQuery.isLoading &&
+    !driverPublicQuery.error
+
+  const trackingContent = (
+    <div className="space-y-4">
+      <StepPanelSection label="Маршрут" muted>
+        <div className="space-y-4">
+          <RoutePoint label="Подача" value={safeOrder.fromAddress ?? 'Точка A'} accent="emerald" />
+          <RoutePoint label="Назначение" value={safeOrder.toAddress ?? 'Точка B'} accent="rose" />
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            {routeMetrics.map((metric) => (
+              <RouteMetric key={metric.label} {...metric} />
+            ))}
           </div>
-
-          {!canSendReview ? (
-            <p className="text-sm text-gray-600 mt-3">
-              Не удалось отправить отзыв: нет данных о водителе.
-            </p>
-          ) : (
-            <div className="mt-4 rounded-xl border border-gray-200 bg-white p-3">
-              <label className="block text-sm font-medium text-gray-700">Оценка</label>
-              <select
-                className="mt-1 w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
-                value={reviewRating}
-                onChange={(e) => setReviewRating(Number(e.target.value))}
-                disabled={createReviewMutation.isPending}
-              >
-                <option value={5}>5</option>
-                <option value={4}>4</option>
-                <option value={3}>3</option>
-                <option value={2}>2</option>
-                <option value={1}>1</option>
-              </select>
-
-              <label className="block text-sm font-medium text-gray-700 mt-3">Комментарий</label>
-              <textarea
-                className="mt-1 w-full min-h-[90px] rounded-md border border-gray-300 bg-white px-3 py-2 text-sm"
-                value={reviewText}
-                onChange={(e) => setReviewText(e.target.value)}
-                placeholder="Если есть что сказать — напиши пару слов"
-                disabled={createReviewMutation.isPending}
-              />
-
-              <button
-                className="btn btn-primary w-full px-4 py-2 mt-3 disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={() => void handleSubmitReview()}
-                disabled={createReviewMutation.isPending}
-              >
-                {createReviewMutation.isPending ? 'Отправляю…' : 'Отправить отзыв'}
-              </button>
-            </div>
-          )}
         </div>
-      ) : (
-        <div>
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold text-gray-900">Текущий заказ</h2>
-              <div className="text-xs text-gray-500 mt-0.5">Отслеживание статуса</div>
+      </StepPanelSection>
+
+      <StepPanelSection label="Статус" muted>
+        <div className="flex items-center gap-2 text-base font-semibold text-gray-900">
+          <Navigation className="h-4 w-4 text-gray-500" />
+          <span>{getCustomerStatusLabel(safeOrder.status)}</span>
+        </div>
+        {canCancel ? (
+          <button
+            className="mt-4 w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm font-semibold text-gray-700 transition hover:border-gray-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 disabled:cursor-not-allowed disabled:opacity-50"
+            onClick={() => cancelMutation.mutate(safeOrder.id)}
+            disabled={cancelMutation.isPending}
+          >
+            Отменить заказ
+          </button>
+        ) : null}
+      </StepPanelSection>
+
+      {showDriverSection ? (
+        <StepPanelSection label="Водитель" muted>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+              <UserRound className="h-4 w-4 text-gray-500" />
+              <span className="truncate">{driverPublicQuery.data!.name}</span>
             </div>
-            <div className="text-xs font-medium text-gray-600">#{safeOrder.id}</div>
-          </div>
-
-          <div className="mt-4 rounded-xl border border-gray-200 bg-white/70 p-3">
-            <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-              Маршрут
-            </div>
-
-            <div className="mt-2 grid gap-2 text-sm">
-              <div>
-                <div className="text-xs text-gray-500">Подача</div>
-                <div className="font-semibold text-gray-900 leading-snug">
-                  {safeOrder.fromAddress ?? 'Точка A'}
-                </div>
+            {driverPublicQuery.data!.phone ? (
+              <div className="flex items-center gap-2 text-sm text-gray-700">
+                <Phone className="h-4 w-4 text-gray-500" />
+                <span className="font-semibold">{driverPublicQuery.data!.phone}</span>
               </div>
-
-              <div>
-                <div className="text-xs text-gray-500">Куда</div>
-                <div className="font-semibold text-gray-900 leading-snug">
-                  {safeOrder.toAddress ?? 'Точка B'}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white/70 px-3 py-2">
-            <div>
-              <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                Статус
-              </div>
-              <div className="text-sm font-semibold text-gray-900">
-                {getCustomerStatusLabel(safeOrder.status)}
-              </div>
-            </div>
-
-            <div className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-              {safeOrder.comfortType === 'business'
-                ? 'Бизнес'
-                : safeOrder.comfortType === 'comfort'
-                  ? 'Комфорт'
-                  : 'Эконом'}
-            </div>
-          </div>
-
-          {safeOrder.driverId ? (
-            <div className="mt-3 rounded-xl border border-gray-200 bg-white/70 p-3">
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                  Водитель
-                </div>
-
-                {driverPublicQuery.data?.comfortLevel ? (
-                  <div className="rounded-full bg-gray-900/5 px-3 py-1 text-xs font-semibold text-gray-800">
-                    {driverPublicQuery.data.comfortLevel === 'business'
-                      ? 'Бизнес'
-                      : driverPublicQuery.data.comfortLevel === 'comfort'
-                        ? 'Комфорт'
-                        : 'Эконом'}
-                  </div>
-                ) : null}
-              </div>
-
-              <div className="mt-2 text-sm font-semibold text-gray-900">
-                {driverPublicQuery.isLoading
-                  ? 'Загрузка…'
-                  : driverPublicQuery.error
-                    ? 'Не удалось загрузить'
-                    : driverPublicQuery.data?.name ?? '—'}
-              </div>
-
-              {driverPublicQuery.data?.phone ? (
-                <div className="mt-1 text-xs text-gray-600">
-                  Телефон: <span className="font-medium">{driverPublicQuery.data.phone}</span>
-                </div>
-              ) : null}
-
-              {driverPublicQuery.data?.car ? (
-                <div className="mt-2 rounded-lg border border-gray-200 bg-white px-3 py-2">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                    Машина
-                  </div>
-                  <div className="mt-1 text-sm text-gray-900">
-                    <span className="font-semibold">{driverPublicQuery.data.car.make}</span>{' '}
-                    {driverPublicQuery.data.car.model}
-                  </div>
-                  <div className="mt-0.5 text-xs text-gray-600">
-                    {driverPublicQuery.data.car.color} ·{' '}
-                    <span className="font-semibold text-gray-900">
-                      {driverPublicQuery.data.car.plate}
-                    </span>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          <div className="mt-3">
-            {canCancel ? (
-              <button
-                className="btn btn-outline px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                onClick={() => cancelMutation.mutate(safeOrder.id)}
-                disabled={cancelMutation.isPending}
-              >
-                Отменить заказ
-              </button>
             ) : null}
+            {driverPublicQuery.data!.car ? (
+              <div className="flex items-start gap-3 text-sm text-gray-900">
+                <Car className="h-10 w-5 text-gray-500" />
+                <div>
+                  <p className="font-semibold">
+                    {driverPublicQuery.data!.car.make} {driverPublicQuery.data!.car.model}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {driverPublicQuery.data!.car.color} ·{' '}
+                    <span className="font-semibold tracking-widest text-gray-900">
+                      {driverPublicQuery.data!.car.plate}
+                    </span>
+                  </p>
+                </div>
+              </div>
+            ) : null}
+            <div className="flex flex-wrap items-center gap-2 rounded-2xl bg-gray-50 px-3 py-2 text-sm">
+              <div className="flex items-center gap-1 text-gray-900">
+                <Star className="h-4 w-4 text-amber-500" />
+                <span className="font-semibold">
+                  {formatDriverRating(driverPublicQuery.data!.averageRating)} / 5
+                </span>
+              </div>
+              <span className="text-xs text-gray-500">
+                {normalizeReviewsCount(driverPublicQuery.data!.totalReviews)} отзывов
+              </span>
+            </div>
           </div>
-        </div>
-      )}
+        </StepPanelSection>
+      ) : null}
+    </div>
+  )
 
-      {currentOrderQuery.error ? (
-        <p className="text-sm text-red-600 mt-3">{String(currentOrderQuery.error)}</p>
-      ) : null}
-      {cancelMutation.error ? (
-        <p className="text-sm text-red-600 mt-3">{String(cancelMutation.error)}</p>
-      ) : null}
-      {createReviewMutation.error ? (
-        <p className="text-sm text-red-600 mt-3">{String(createReviewMutation.error)}</p>
-      ) : null}
+  const reviewContent = !canSendReview ? (
+    <StepPanelSection muted>
+      <p className="text-sm text-gray-600">Нет данных о водителе — отзыв недоступен.</p>
+    </StepPanelSection>
+  ) : (
+    <StepPanelSection>
+      <div className="space-y-5">
+        <div className="space-y-3 text-center">
+          <p className="text-sm font-semibold text-gray-700">Оцени поездку</p>
+          <StarRating
+            value={reviewRating}
+            onChange={(next) => setReviewRating(next)}
+            className="justify-center"
+            ariaLabel="Оценка поездки"
+          />
+          <p className="text-xs text-gray-500">{reviewRating} из 5</p>
+        </div>
+
+        <div>
+          <label className="flex items-center gap-2 text-sm font-semibold text-gray-700">
+            <MessageSquare className="h-4 w-4 text-gray-500" />
+            Комментарий
+          </label>
+          <textarea
+            className="mt-2 w-full min-h-[90px] rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm"
+            value={reviewText}
+            onChange={(e) => setReviewText(e.target.value)}
+            placeholder="Расскажи, как прошла поездка"
+            disabled={createReviewMutation.isPending}
+          />
+        </div>
+
+        <button
+          className="w-full rounded-2xl border border-transparent bg-gradient-to-r from-primary to-primary-dark px-4 py-3 text-sm font-semibold text-white shadow-lg shadow-primary/40 transition disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => void handleSubmitReview()}
+          disabled={createReviewMutation.isPending}
+        >
+          {createReviewMutation.isPending ? 'Отправляю…' : 'Отправить отзыв'}
+        </button>
+      </div>
+    </StepPanelSection>
+  )
+
+  const baseWrapperClasses = 'absolute top-4 left-4 right-4 md:right-auto md:w-[420px]'
+
+  return (
+    <div className={baseWrapperClasses}>
+      <StepPanelCard>
+        <StepPanelHeader
+          stepBadge={isFinished ? 'Шаг 3 · Отзыв' : 'Шаг 2 · Отслеживание'}
+          meta={headerMeta}
+        />
+
+        <StepPanelBody>
+          {isFinished ? reviewContent : trackingContent}
+
+          {currentOrderQuery.error ? (
+            <p className="text-sm text-red-600 mt-3">{String(currentOrderQuery.error)}</p>
+          ) : null}
+          {cancelMutation.error ? (
+            <p className="text-sm text-red-600 mt-3">{String(cancelMutation.error)}</p>
+          ) : null}
+          {createReviewMutation.error ? (
+            <p className="text-sm text-red-600 mt-3">{String(createReviewMutation.error)}</p>
+          ) : null}
+        </StepPanelBody>
+      </StepPanelCard>
     </div>
   )
 }

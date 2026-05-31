@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { CheckCircle2, Clock, MapPin, Navigation, Phone, Power, Ruler, Search, User } from 'lucide-react'
 import {
   acceptDriverOrder,
   driverGoOffline,
@@ -13,6 +14,7 @@ import {
 import type { Order } from '../../shared/api/types/orderTypes'
 import { useDriverModeStore } from '../../shared/lib/stores/driverModeStore'
 import { loadYmaps } from '../../shared/lib/ymaps'
+import { StepPanelBody, StepPanelCard, StepPanelSection } from '../order-creation/components/StepPanel'
 
 type GeoObject = unknown
 
@@ -41,6 +43,31 @@ type YMapsLike = {
     MultiRoute: new (model: Record<string, unknown>, options?: Record<string, unknown>) => GeoObject
   }
 }
+
+function formatDistance(distanceMeters?: number) {
+  if (!distanceMeters && distanceMeters !== 0) return '—'
+  if (distanceMeters >= 1000) {
+    return `${(distanceMeters / 1000).toFixed(1)} км`
+  }
+  return `${Math.round(distanceMeters)} м`
+}
+
+function formatDuration(durationSeconds?: number) {
+  if (!durationSeconds && durationSeconds !== 0) return '—'
+  const minutes = Math.max(1, Math.round(durationSeconds / 60))
+  if (minutes < 60) {
+    return `${minutes} мин`
+  }
+  const hours = Math.floor(minutes / 60)
+  const restMinutes = minutes % 60
+  return `${hours} ч ${restMinutes || 0} мин`
+}
+
+const comfortBadgeMeta = {
+  economy: { label: 'Эконом', pill: 'bg-emerald-50 text-emerald-700' },
+  comfort: { label: 'Комфорт', pill: 'bg-sky-50 text-sky-700' },
+  business: { label: 'Бизнес', pill: 'bg-amber-50 text-amber-700' },
+} as const
 
 function getNextDriverStatus(status: Order['status']): 'arrived' | 'in_progress' | 'finished' | null {
   if (status === 'accepted') return 'arrived'
@@ -185,6 +212,14 @@ export function DriverDashboard() {
     currentOrder && getNextDriverStatus(currentOrder.status) && !setStatusMutation.isPending
   )
 
+  const isCurrentOrderLocked = Boolean(
+    currentOrder && !['finished', 'canceled_by_customer'].includes(currentOrder.status)
+  )
+
+  const currentComfortBadge = currentOrder
+    ? comfortBadgeMeta[currentOrder.comfortType] ?? comfortBadgeMeta.economy
+    : null
+
   useEffect(() => {
     let isCancelled = false
 
@@ -283,7 +318,7 @@ export function DriverDashboard() {
       pointAPlacemarkRef.current = new ymaps.Placemark(
         orderForRoute.fromCoords,
         { iconCaption: 'A' },
-        { preset: 'islands#blueStretchyIcon' }
+        { preset: 'islands#darkGreenStretchyIcon' }
       )
       map.geoObjects.add(pointAPlacemarkRef.current)
     } else {
@@ -481,236 +516,298 @@ export function DriverDashboard() {
       navigator.geolocation.clearWatch(watchId)
     }
   }, [isOnline, mapReady])
-
   return (
-    <div className="relative w-full h-full">
-      <div ref={mapContainerRef} className="w-full h-full" />
+    <div className="relative h-full w-full">
+      <div ref={mapContainerRef} className="h-full w-full" />
 
-      <div className="absolute top-4 left-4 right-4 md:right-auto md:w-[420px] bg-white/95 backdrop-blur rounded-lg border border-gray-200 p-4 shadow">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-lg font-semibold text-gray-900">Экран водителя</h1>
-        </div>
-
-        {currentOrder ? null : (
-          <div className="mt-3 border rounded-lg p-3 bg-white">
-            <div className="flex items-center justify-between gap-4">
+      <div className="pointer-events-none absolute top-4 left-4 right-4 flex flex-col gap-4 md:right-auto md:w-[480px]">
+        <StepPanelCard className="pointer-events-auto">
+          <StepPanelBody className="space-y-4">
+            <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-gray-900 font-semibold">Режим работы</p>
-                <p className="text-sm text-gray-600">
-                  {isOnline ? 'Вы на линии. Ищем заказы…' : 'Вы не на линии. Включите режим онлайн.'}
+                <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                  <Power className="h-4 w-4" />
+                  Режим работы
+                </div>
+                <p className="mt-2 text-sm font-semibold text-gray-900">
+                  {isOnline ? 'Вы на линии — ловим новые заказы' : 'Вы не на линии — включите онлайн'}
                 </p>
               </div>
 
-              {isOnline ? (
-                <button
-                  onClick={() => {
-                    setFocusedOrderId(null)
-                    goOfflineMutation.mutate()
-                  }}
-                  className="btn btn-outline px-3 py-2"
-                  disabled={goOfflineMutation.isPending}
+              <div className="flex flex-col items-end gap-2">
+                <span
+                  className={`flex items-center gap-2 rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${
+                    isOnline ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-600'
+                  }`}
                 >
-                  Оффлайн
-                </button>
-              ) : (
-                <button
-                  onClick={() => goOnlineMutation.mutate()}
-                  className="btn btn-primary px-3 py-2"
-                  disabled={goOnlineMutation.isPending}
-                >
-                  Онлайн
-                </button>
-              )}
+                  <CheckCircle2 className="h-4 w-4" />
+                  {isOnline ? 'Онлайн' : 'Оффлайн'}
+                </span>
+
+                {isOnline ? (
+                  <button
+                    onClick={() => {
+                      setFocusedOrderId(null)
+                      goOfflineMutation.mutate()
+                    }}
+                    className="rounded-2xl border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-900 transition hover:border-gray-300 disabled:cursor-not-allowed disabled:opacity-60"
+                    disabled={goOfflineMutation.isPending || isCurrentOrderLocked}
+                    title={isCurrentOrderLocked ? 'Завершите заказ, чтобы выйти оффлайн' : undefined}
+                  >
+                    Выключить
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => goOnlineMutation.mutate()}
+                    className="rounded-2xl bg-gray-900 px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-gray-900/20 transition hover:translate-y-0.5 disabled:opacity-60"
+                    disabled={goOnlineMutation.isPending}
+                  >
+                    Выйти на линию
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+            {isCurrentOrderLocked ? (
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-amber-700">
+                Активный заказ — нельзя выходить оффлайн.
+              </p>
+            ) : null}
+          </StepPanelBody>
+        </StepPanelCard>
 
         {!isOnline ? null : currentOrderQuery.isLoading && !currentOrder ? (
-          <div className="mt-3 text-gray-600">Загрузка текущего заказа…</div>
+          <StepPanelCard className="pointer-events-auto">
+            <StepPanelBody>
+              <p className="text-sm text-gray-600">Подгружаем ваш активный заказ…</p>
+            </StepPanelBody>
+          </StepPanelCard>
         ) : currentOrder ? (
-          <div className="mt-3">
-            <div className="rounded-xl border border-gray-200 bg-white/70 p-3">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-base font-semibold text-gray-900">Текущий заказ</h2>
-                  <div className="text-xs text-gray-500 mt-0.5">Управление статусом</div>
+          <StepPanelCard className="pointer-events-auto">
+            <StepPanelBody className="space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-sm font-semibold text-gray-900">
+                  <MapPin className="h-4 w-4 text-gray-500" />
+                  <span>
+                    Текущий заказ # {currentOrder.id}
+                  </span>
                 </div>
-                <div className="text-xs font-medium text-gray-600">#{currentOrder.id}</div>
-              </div>
-
-              <div className="mt-3 rounded-xl border border-gray-200 bg-white/70 p-3">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                  Маршрут
-                </div>
-
-                <div className="mt-2 grid gap-2 text-sm">
-                  <div>
-                    <div className="text-xs text-gray-500">Подача</div>
-                    <div className="font-semibold text-gray-900 leading-snug">
-                      {currentOrder.fromAddress ?? 'Точка A'}
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="text-xs text-gray-500">Куда</div>
-                    <div className="font-semibold text-gray-900 leading-snug">
-                      {currentOrder.toAddress ?? 'Точка B'}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-gray-200 bg-white/70 px-3 py-2">
-                <div>
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                    Статус
-                  </div>
-                  <div className="text-sm font-semibold text-gray-900">
-                    {getDriverStatusLabel(currentOrder.status)}
-                  </div>
-                </div>
-
-                <div className="rounded-full bg-primary/10 px-3 py-1 text-xs font-semibold text-primary">
-                  {currentOrder.comfortType === 'business'
-                    ? 'Бизнес'
-                    : currentOrder.comfortType === 'comfort'
-                      ? 'Комфорт'
-                      : 'Эконом'}
-                </div>
-              </div>
-
-              <div className="mt-3 rounded-xl border border-gray-200 bg-white/70 p-3">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                  Клиент
-                </div>
-
-                <div className="mt-2 text-sm font-semibold text-gray-900">
-                  {currentOrderCustomerQuery.isLoading
-                    ? 'Загрузка…'
-                    : currentOrderCustomerQuery.error
-                      ? 'Не удалось загрузить'
-                      : currentOrderCustomerQuery.data?.name ?? '—'}
-                </div>
-
-                {currentOrderCustomerQuery.data?.phone ? (
-                  <div className="mt-1 text-xs text-gray-600">
-                    Телефон:{' '}
-                    <span className="font-medium">{currentOrderCustomerQuery.data.phone}</span>
-                  </div>
-                ) : null}
-
-                {currentOrderCustomerQuery.error ? (
-                  <div className="text-xs text-red-600 mt-1">
-                    {String(currentOrderCustomerQuery.error)}
-                  </div>
+                {currentComfortBadge ? (
+                  <span
+                    className={`rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-wide ${currentComfortBadge.pill}`}
+                  >
+                    {currentComfortBadge.label}
+                  </span>
                 ) : null}
               </div>
 
-              <div className="mt-3">
-                <button
-                  className="btn btn-primary w-full px-4 py-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                  onClick={() => {
-                    const next = getNextDriverStatus(currentOrder.status)
-                    if (!next) return
-                    setStatusMutation.mutate({ orderId: currentOrder.id, status: next })
-                  }}
-                  disabled={!canGoNextStatus}
-                >
-                  {getNextDriverStatusLabel(currentOrder.status)}
-                </button>
-              </div>
-            </div>
+              <StepPanelSection label="Маршрут" muted>
+                <div className="space-y-4">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 rounded-2xl bg-emerald-50 p-2 text-emerald-600 shadow-sm">
+                      <MapPin className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Подача</p>
+                      <p className="text-sm font-semibold text-gray-900">
+                        {currentOrder.fromAddress ?? 'Точка A'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 rounded-2xl bg-rose-50 p-2 text-rose-600 shadow-sm">
+                      <MapPin className="h-4 w-4" />
+                    </span>
+                    <div>
+                      <p className="text-xs uppercase tracking-wide text-gray-500">Назначение</p>
+                      <p className="text-sm font-semibold text-gray-900">
+                        {currentOrder.toAddress ?? 'Точка B'}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                    <div className="flex items-center gap-2 text-sm text-gray-900">
+                      <span className="rounded-xl bg-gray-900/90 p-1.5 text-white">
+                        <Ruler className="h-4 w-4" />
+                      </span>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wide text-gray-500">Дистанция</p>
+                        <p className="font-semibold">{formatDistance(currentOrder.distanceMeters)}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 text-sm text-gray-900">
+                      <span className="rounded-xl bg-gray-900/90 p-1.5 text-white">
+                        <Clock className="h-4 w-4" />
+                      </span>
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wide text-gray-500">В пути</p>
+                        <p className="font-semibold">{formatDuration(currentOrder.durationSeconds)}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </StepPanelSection>
 
-            {currentOrderQuery.error ? (
-              <p className="text-sm text-red-600 mt-3">{String(currentOrderQuery.error)}</p>
-            ) : null}
-            {setStatusMutation.error ? (
-              <p className="text-sm text-red-600 mt-3">{String(setStatusMutation.error)}</p>
-            ) : null}
-          </div>
+              <StepPanelSection label="Статус">
+                <div className="flex items-center gap-3">
+                  <span className="rounded-2xl bg-gray-900/90 p-2 text-white">
+                    <Navigation className="h-4 w-4" />
+                  </span>
+                  <div>
+                    <p className="text-xs uppercase tracking-wide text-gray-500">Текущее состояние</p>
+                    <p className="text-sm font-semibold text-gray-900">{getDriverStatusLabel(currentOrder.status)}</p>
+                  </div>
+                </div>
+              </StepPanelSection>
+
+              <StepPanelSection label="Клиент" muted>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2 text-gray-900">
+                    <User className="h-4 w-4 text-gray-500" />
+                    {currentOrderCustomerQuery.isLoading
+                      ? 'Загрузка…'
+                      : currentOrderCustomerQuery.error
+                        ? 'Не удалось загрузить'
+                        : currentOrderCustomerQuery.data?.name ?? '—'}
+                  </div>
+                  {currentOrderCustomerQuery.data?.phone ? (
+                    <div className="flex items-center gap-2 text-gray-600">
+                      <Phone className="h-4 w-4 text-gray-500" />
+                      <span className="font-medium">{currentOrderCustomerQuery.data.phone}</span>
+                    </div>
+                  ) : null}
+                  {currentOrderCustomerQuery.error ? (
+                    <p className="text-xs text-red-600">{String(currentOrderCustomerQuery.error)}</p>
+                  ) : null}
+                </div>
+              </StepPanelSection>
+
+              <button
+                className="w-full rounded-2xl bg-gradient-to-r from-gray-900 to-gray-800 px-5 py-3 text-sm font-semibold text-white shadow-lg shadow-gray-900/25 transition hover:translate-y-0.5 disabled:translate-y-0 disabled:opacity-50"
+                onClick={() => {
+                  const next = getNextDriverStatus(currentOrder.status)
+                  if (!next) return
+                  setStatusMutation.mutate({ orderId: currentOrder.id, status: next })
+                }}
+                disabled={!canGoNextStatus}
+              >
+                {setStatusMutation.isPending
+                  ? 'Обновляем…'
+                  : getNextDriverStatusLabel(currentOrder.status) === '—'
+                    ? 'Нет следующих шагов'
+                    : getNextDriverStatusLabel(currentOrder.status)}
+              </button>
+
+              {currentOrderQuery.error ? (
+                <p className="text-sm text-red-600">{String(currentOrderQuery.error)}</p>
+              ) : null}
+              {setStatusMutation.error ? (
+                <p className="text-sm text-red-600">{String(setStatusMutation.error)}</p>
+              ) : null}
+            </StepPanelBody>
+          </StepPanelCard>
         ) : (
-          <div className="mt-3">
-            <h2 className="text-base font-semibold">Доступные заказы</h2>
+          <StepPanelCard className="pointer-events-auto">
+            <StepPanelBody className="space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                    <Search className="h-4 w-4" />
+                    Доступные заказы
+                  </div>
+                  <p className="mt-1 text-sm text-gray-600">Кликните по карточке, чтобы увидеть маршрут.</p>
+                </div>
+                <div className="rounded-full bg-gray-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-wide text-gray-600">
+                  {availableOrdersQuery.data?.length ?? 0} шт.
+                </div>
+              </div>
 
-            {availableOrdersQuery.isLoading ? (
-              <div className="text-gray-600 mt-2">Загрузка заказов…</div>
-            ) : availableOrdersQuery.error ? (
-              <div className="text-red-600 mt-2">{String(availableOrdersQuery.error)}</div>
-            ) : (availableOrdersQuery.data?.length ?? 0) === 0 ? (
-              <div className="text-gray-600 mt-2">Пока нет заказов.</div>
-            ) : (
-              <div className="mt-3 flex flex-col gap-2">
-                <div className="text-xs text-gray-500">Нажми на заказ, чтобы показать маршрут</div>
-                {availableOrdersQuery.data?.map((order) => {
-                  const isFocused = String(order.id) === String(effectiveFocusedOrderId)
-                  return (
-                    <button
-                      key={order.id}
-                      className={
-                        (isFocused
-                          ? 'border-blue-500 ring-2 ring-blue-200'
-                          : 'border-gray-200 hover:border-gray-300') +
-                        ' text-left border rounded-lg p-3 bg-white'
-                      }
-                      onClick={() =>
-                        setFocusedOrderId((prev) =>
-                          String(prev) === String(order.id) ? null : order.id
-                        )
-                      }
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="min-w-0">
-                          <div className="flex items-center justify-between gap-3">
-                            <div className="text-xs text-gray-500">Заказ #{order.id}</div>
-                            <div className="text-xs font-semibold text-gray-900">
-                              {order.priceByN} BYN
+              {availableOrdersQuery.isLoading ? (
+                <p className="text-sm text-gray-600">Загрузка заказов…</p>
+              ) : availableOrdersQuery.error ? (
+                <p className="text-sm text-red-600">{String(availableOrdersQuery.error)}</p>
+              ) : (availableOrdersQuery.data?.length ?? 0) === 0 ? (
+                <div className="flex items-center gap-3 rounded-3xl border border-gray-100 bg-white/70 px-4 py-3 text-sm text-gray-500">
+                  <Clock className="h-4 w-4" />
+                  Пока нет заказов. Оставайтесь онлайн, чтобы поймать первый.
+                </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  {availableOrdersQuery.data?.map((order) => {
+                    const isFocused = String(order.id) === String(effectiveFocusedOrderId)
+                    return (
+                      <button
+                        key={order.id}
+                        className={`rounded-3xl border px-4 py-3 text-left transition ${
+                          isFocused
+                            ? 'border-gray-900 bg-gray-900 text-white shadow-lg shadow-gray-900/30'
+                            : 'border-gray-200 bg-white hover:border-gray-300'
+                        }`}
+                        onClick={() =>
+                          setFocusedOrderId((prev) =>
+                            String(prev) === String(order.id) ? null : order.id
+                          )
+                        }
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0 space-y-2 text-sm">
+                            <div className="flex items-center justify-between gap-2 text-xs font-semibold uppercase tracking-wide">
+                              <span className={isFocused ? 'text-white/80' : 'text-gray-500'}>
+                                Заказ #{order.id}
+                              </span>
+                              <span>{order.priceByN} BYN</span>
+                            </div>
+                            <div>
+                              <p className="text-xs uppercase tracking-wide text-gray-500">
+                                Подача
+                              </p>
+                              <p className={`font-semibold ${isFocused ? 'text-white' : 'text-gray-900'}`}>
+                                {order.fromAddress ?? 'Точка A'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs uppercase tracking-wide text-gray-500">
+                                Назначение
+                              </p>
+                              <p className={`font-semibold ${isFocused ? 'text-white' : 'text-gray-900'}`}>
+                                {order.toAddress ?? 'Точка B'}
+                              </p>
+                            </div>
+                            <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+                              <span className="flex items-center gap-1">
+                                <Ruler className="h-4 w-4" />
+                                {formatDistance(order.distanceMeters)}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Clock className="h-4 w-4" />
+                                {formatDuration(order.durationSeconds)}
+                              </span>
                             </div>
                           </div>
-
-                          <div className="mt-2">
-                            <div className="text-xs text-gray-500">Подача</div>
-                            <div className="font-semibold text-gray-900 truncate">
-                              {order.fromAddress ?? 'Точка A'}
-                            </div>
-                          </div>
-
-                          <div className="mt-2">
-                            <div className="text-xs text-gray-500">Куда</div>
-                            <div className="font-semibold text-gray-900 truncate">
-                              {order.toAddress ?? 'Точка B'}
-                            </div>
-                          </div>
-
-                          <div className="text-xs text-gray-500 mt-2">
-                            {Math.round(order.distanceMeters)} м · {Math.round(order.durationSeconds)} сек
-                          </div>
-                        </div>
-                        {isFocused ? (
-                          <div>
+                          {isFocused ? (
                             <button
                               onClick={(e) => {
                                 e.preventDefault()
                                 e.stopPropagation()
                                 acceptMutation.mutate(order.id)
                               }}
-                              className="btn btn-primary px-3 py-2"
+                              className="rounded-2xl bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow transition hover:translate-y-0.5 disabled:opacity-50"
                               disabled={acceptMutation.isPending}
                             >
                               Принять
                             </button>
-                          </div>
-                        ) : null}
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-            )}
+                          ) : null}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
 
-            {acceptMutation.error ? (
-              <p className="text-sm text-red-600 mt-3">{String(acceptMutation.error)}</p>
-            ) : null}
-          </div>
+              {acceptMutation.error ? (
+                <p className="text-sm text-red-600">{String(acceptMutation.error)}</p>
+              ) : null}
+            </StepPanelBody>
+          </StepPanelCard>
         )}
       </div>
     </div>

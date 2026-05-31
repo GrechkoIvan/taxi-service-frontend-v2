@@ -3,6 +3,8 @@ import { createJSONStorage, persist } from 'zustand/middleware'
 import type { Order } from '../../api/types/orderTypes'
 
 export type ActivePoint = 'A' | 'B'
+export type ActivePointMode = ActivePoint | null
+
 export type Coords = [number, number]
 
 export type RouteInfo = {
@@ -15,7 +17,7 @@ export type RouteInfo = {
 interface OrderCreationState {
   activeOrder: Order | null
 
-  activePoint: ActivePoint
+  activePoint: ActivePointMode
 
   fromAddress: string
   toAddress: string
@@ -33,7 +35,7 @@ interface OrderCreationState {
 
   setActiveOrder: (order: Order | null) => void
 
-  setActivePoint: (next: ActivePoint) => void
+  setActivePoint: (next: ActivePointMode) => void
   setFromAddress: (next: string) => void
   setToAddress: (next: string) => void
   setPointACoords: (coords: Coords | null) => void
@@ -53,7 +55,7 @@ interface OrderCreationState {
 const initialState = {
   activeOrder: null as Order | null,
 
-  activePoint: 'A' as ActivePoint,
+  activePoint: null as ActivePointMode,
 
   fromAddress: '',
   toAddress: '',

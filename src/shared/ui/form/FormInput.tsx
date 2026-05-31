@@ -3,13 +3,14 @@ import type { InputHTMLAttributes } from 'react'
 import { FormError } from './FormError'
 
 type FormInputProps = {
-  label: string
+  label?: string
+  labelHidden?: boolean
   error?: string
   helperText?: string
 } & InputHTMLAttributes<HTMLInputElement>
 
 export const FormInput = forwardRef<HTMLInputElement, FormInputProps>(
-  ({ id, label, error, helperText, className = '', ...rest }, ref) => {
+  ({ id, label, labelHidden, error, helperText, className = '', ...rest }, ref) => {
     const fieldId = id ?? (typeof rest.name === 'string' ? rest.name : undefined)
     const errorId = error && fieldId ? `${fieldId}-error` : undefined
     const helperId =
@@ -17,12 +18,16 @@ export const FormInput = forwardRef<HTMLInputElement, FormInputProps>(
 
     return (
       <div className="space-y-2">
-        <label
-          htmlFor={fieldId}
-          className="block text-sm font-medium text-gray-700"
-        >
-          {label}
-        </label>
+        {label ? (
+          <label
+            htmlFor={fieldId}
+            className={`block text-sm font-medium text-gray-700 ${
+              labelHidden ? 'sr-only' : ''
+            }`}
+          >
+            {label}
+          </label>
+        ) : null}
         <input
           id={fieldId}
           ref={ref}

@@ -5,7 +5,7 @@ export function AuthSelectionPage() {
     <div className="container py-12">
       <div className="max-w-2xl mx-auto text-center">
         <h1 className="text-4xl font-bold mb-6 text-gray-900">
-          Добро пожаловать в Taxi Service
+          Добро пожаловать в Crazy Taxi
         </h1>
         <p className="text-xl text-gray-600 mb-8">
           Сервис для заказа такси для клиентов и водителей

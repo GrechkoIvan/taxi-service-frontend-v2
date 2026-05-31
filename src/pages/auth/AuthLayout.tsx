@@ -15,7 +15,7 @@ export function AuthLayout({ children, title }: AuthLayoutProps) {
             {title}
           </h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Такси Сервис - быстрый и надежный способ заказать такси
+            Crazy Taxi — быстрый и надёжный способ заказать поездку
           </p>
         </div>
 

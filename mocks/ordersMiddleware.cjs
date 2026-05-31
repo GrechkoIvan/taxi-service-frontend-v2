@@ -31,6 +31,19 @@ function writeDb(db) {
   fs.writeFileSync(dbPath, JSON.stringify(db, null, 2), 'utf-8')
 }
 
+function computeDriverReviewsSummary(db, driverId) {
+  const driverReviews = db.reviews.filter((review) => String(review.driverId) === String(driverId))
+  const totalReviews = driverReviews.length
+  const averageRating = totalReviews
+    ? driverReviews.reduce((acc, review) => acc + (Number(review.rating) || 0), 0) / totalReviews
+    : 0
+
+  return {
+    averageRating,
+    totalReviews,
+  }
+}
+
 function isFinalStatus(status) {
   return status === 'finished' || status === 'canceled_by_customer'
 }
@@ -162,13 +175,38 @@ module.exports = (req, res, next) => {
         return false
       })
 
+      const ratingSummary = computeDriverReviewsSummary(db, driverId)
+
       return json(res, 200, {
         id: driverUser.id,
         name: driverUser.name,
         phone: driverUser.phone,
         comfortLevel: driverRecord?.comfortLevel ?? null,
+        averageRating: ratingSummary.averageRating,
+        totalReviews: ratingSummary.totalReviews,
         car: driverRecord?.car ?? null,
       })
+    }
+
+    // GET /customers/drivers/:id/reviews-summary
+    if (req.method === 'GET' && /^\/customers\/drivers\/[^/]+\/reviews-summary$/.test(path)) {
+      const driverId = path.split('/')[3]
+      const db = readDb()
+
+      const hasOrderWithThisDriver = db.orders.some((o) => {
+        if (String(o.customerId) !== String(user.id)) return false
+        if (!o.driverId) return false
+        if (String(o.driverId) !== String(driverId)) return false
+        if (o.status === 'canceled_by_customer') return false
+        return true
+      })
+
+      if (!hasOrderWithThisDriver) {
+        return json(res, 403, { message: 'Доступ запрещён' })
+      }
+
+      const ratingSummary = computeDriverReviewsSummary(db, driverId)
+      return json(res, 200, ratingSummary)
     }
 
     // GET /customers/orders/current
