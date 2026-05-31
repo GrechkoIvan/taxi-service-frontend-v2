@@ -1,0 +1,1 @@
+export { loadYmaps } from './loadYmaps'
